@@ -9,6 +9,7 @@ import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class Server {
     private static AtomicInteger COUNTER = new AtomicInteger(0);
@@ -34,6 +35,10 @@ public class Server {
         new Server(8080).start();
     }
 
+    public String getAllClientsInfo() {
+        return clients.entrySet().stream().map(client -> client.getKey() + ":" + client.getValue().getClientName()).collect(Collectors.joining(","));
+    }
+
     // 注册后上线
     public void registerClient(ClientConnection clientConnection) {
         clients.put(clientConnection.getClientId(), clientConnection);
@@ -43,7 +48,7 @@ public class Server {
     // 上线发送消息
     public void clientOnline(ClientConnection clientWhoHasJustLoggedIn) {
         clients.values().forEach(client -> {
-            dispatchMessage(client, "系统", clientWhoHasJustLoggedIn.getClientName(), "上线了");
+            dispatchMessage(client, "系统", "所有人", clientWhoHasJustLoggedIn.getClientName() + "上线了" + getAllClientsInfo());
 
         });
     }
@@ -51,7 +56,7 @@ public class Server {
     public void sendMessage(ClientConnection src, Message message) {
         if (message.getId() == 0) {
             clients.values().forEach(client -> {
-                dispatchMessage(client, src.getClientName(), "所有人", "下线了");
+                dispatchMessage(client, src.getClientName(), "所有人", message.getMessage());
             });
         } else {
             int targetUser = message.getId();
@@ -67,7 +72,7 @@ public class Server {
     public void clientOffline(ClientConnection clientConnection) {
         clients.remove(clientConnection.getClientId());
         clients.values().forEach(client -> {
-            dispatchMessage(client, "系统", clientConnection.getClientName(), "下线了");
+            dispatchMessage(client, "系统", clientConnection.getClientName(), "下线了" + getAllClientsInfo());
         });
     }
 
@@ -134,16 +139,22 @@ class ClientConnection extends Thread {
     }
 
     public void sendMessage(String message) throws IOException {
-        socket.getOutputStream().write(message.getBytes(Charset.defaultCharset()));
-        socket.getOutputStream().write('\n');
-        // socket的写是有缓冲的，需要积攒到一定，然后flush冲入
-        socket.getOutputStream().flush();
+        Util.writeMessage(socket, message);
     }
 }
 
 class Message {
     private Integer id;
     private String message;
+
+    // json反序列化需要这个构造器创建
+    Message() {
+    }
+
+    Message(Integer id, String message) {
+        this.id = id;
+        this.message = message;
+    }
 
     public Integer getId() {
         return id;
